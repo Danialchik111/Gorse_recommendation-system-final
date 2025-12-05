@@ -1,0 +1,65 @@
+[master]
+host = "0.0.0.0"
+port = 8086
+http_port = 8088
+cache_timeout = "24h"
+meta_timeout = "24h"
+
+[server]
+api_key = "gorse_key"
+
+[database]
+cache = "redis://redis:6379"
+data_store = "mysql://gorse:gorse_pass@tcp(mysql:3306)/gorse?parseTime=true"
+cache_size = 10000
+
+[recommend]
+data_source_period = "10m"
+popular_window = "168h"  # 7 days
+fit_period = "1h"
+check_recommend_period = "10m"
+refresh_recommend_period = "10m"
+
+# Collaborative filtering
+[recommend.collaborative]
+enable_index = true
+index_fit_period = "1h"
+index_recall = 0.8
+index_feature_epochs = 20
+
+[recommend.replacement]
+enable_replacement = true
+positive_replacement_decay = 0.8
+read_replacement_decay = 0.6
+
+# Item similarity settings
+[recommend.item_neighbors]
+enable_index = false
+similarity = "cosine"
+
+# User similarity settings
+[recommend.user_neighbors]
+enable_index = false
+similarity = "cosine"
+
+# Ranking model
+[recommend.ranking]
+enable_score_calculation = true
+enable_click_through_prediction = true
+fit_period = "1h"
+search_epoch = 100
+search_trials = 10
+
+# Real estate feedback types
+[recommend.feedback_types]
+positive_types = ["contact_agent"]
+read_types = ["view_listing"]
+positive_feedback_weight = 3.0
+read_feedback_weight = 1.0
+
+# Real estate categories
+item_categories = ["rental", "sale", "rental|sale"]
+
+[experiment]
+enable_recommend_evaluation = true
+enable_click_through_evaluation = true
