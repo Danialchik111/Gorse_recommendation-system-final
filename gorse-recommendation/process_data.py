@@ -1,7 +1,3 @@
-"""
-Enhanced Data Processor with Error Handling
-"""
-
 import pandas as pd
 import json
 import ast
@@ -19,40 +15,32 @@ class RealEstateDataProcessor:
         self.users_df = None
         
     def safe_json_parse(self, json_str):
-        """Safely parse JSON string with multiple fallback methods"""
         if pd.isna(json_str):
             return None
             
-        # Method 1: Try direct JSON parsing
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
             pass
             
-        # Method 2: Try ast.literal_eval for Python-like structures
         try:
             return ast.literal_eval(json_str)
         except (ValueError, SyntaxError):
             pass
             
-        # Method 3: Handle escaped quotes
         try:
-            # Replace escaped quotes if present
             cleaned = json_str.replace('\\"', '"').replace('"{', '{').replace('}"', '}')
             return json.loads(cleaned)
         except:
             pass
             
-        # Method 4: Manual extraction for specific format
         print(f"Warning: Could not parse JSON: {json_str[:100]}...")
         return None
     
     def load_data(self):
-        """Load and parse the CSV data with better error handling"""
         print(f"Loading data from {self.input_csv_path}...")
         
         try:
-            # First, let's examine the raw data
             with open(self.input_csv_path, 'r') as f:
                 first_lines = [next(f) for _ in range(3)]
             print("First few lines of CSV:")
@@ -62,7 +50,6 @@ class RealEstateDataProcessor:
             print(f"Could not preview file: {e}")
         
         try:
-            # Try different encodings
             encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
             
             for encoding in encodings:
@@ -84,7 +71,6 @@ class RealEstateDataProcessor:
             print(f"Error loading CSV: {e}")
             return False
         
-        # Parse the event_property column
         print("\nParsing event_property column...")
         parse_errors = 0
         
@@ -105,14 +91,12 @@ class RealEstateDataProcessor:
         if parse_errors > 0:
             print(f"Warning: {parse_errors} rows could not be parsed")
         
-        # Extract properties
         self._extract_properties()
         
         print(f"\nLoaded {len(self.df)} rows of data")
         print(f"Unique users: {self.df['user_id'].nunique()}")
         print(f"Unique properties found: {self.df['house_id'].nunique()}")
         
-        # Show sample of parsed data
         print("\nSample parsed data:")
         for i in range(min(3, len(self.df))):
             row = self.df.iloc[i]
@@ -121,10 +105,8 @@ class RealEstateDataProcessor:
         return True
     
     def _extract_properties(self):
-        """Extract properties from parsed JSON"""
         print("\nExtracting properties...")
         
-        # Initialize columns
         self.df['house_id'] = None
         properties_to_extract = [
             'pageType', 'rent_price', 'sale_price', 
@@ -134,26 +116,20 @@ class RealEstateDataProcessor:
         for prop in properties_to_extract:
             self.df[prop] = None
         
-        # Extract data
         for idx, row in self.df.iterrows():
             parsed = row['event_property_parsed']
             
             if isinstance(parsed, dict):
-                # Extract house_id
                 self.df.at[idx, 'house_id'] = parsed.get('house_id')
                 
-                # Extract other properties
                 for prop in properties_to_extract:
                     self.df.at[idx, prop] = parsed.get(prop)
         
-        # Clean and convert data types
         print("Cleaning data types...")
         
-        # Convert prices to numeric
         self.df['rent_price'] = pd.to_numeric(self.df['rent_price'], errors='coerce')
         self.df['sale_price'] = pd.to_numeric(self.df['sale_price'], errors='coerce')
         
-        # Convert timestamps
         try:
             self.df['created_at'] = pd.to_datetime(self.df['created_at'], errors='coerce')
             self.df['timestamp'] = self.df['created_at'].apply(
@@ -163,28 +139,24 @@ class RealEstateDataProcessor:
             print(f"Warning: Could not parse timestamps: {e}")
             self.df['timestamp'] = 0
         
-        # Show summary
         print(f"\nExtraction Summary:")
         print(f"  Valid house_id entries: {self.df['house_id'].notna().sum()}")
         print(f"  Properties with rent_price: {self.df['rent_price'].notna().sum()}")
         print(f"  Properties with sale_price: {self.df['sale_price'].notna().sum()}")
     
     def create_feedback_data(self, output_path='feedback.csv'):
-        """Create Gorse feedback data"""
         print("\nCreating feedback data...")
         
         if 'house_id' not in self.df.columns or self.df['house_id'].isna().all():
             print("Error: No house_id data found")
             return None
         
-        # Filter out rows without house_id
         valid_rows = self.df[self.df['house_id'].notna()].copy()
         
         if len(valid_rows) == 0:
             print("Error: No valid rows with house_id")
             return None
         
-        # Create feedback entries
         feedback_data = []
         feedback_weights = {
             'view_listing': 1.0,
@@ -203,7 +175,6 @@ class RealEstateDataProcessor:
         
         self.feedback_df = pd.DataFrame(feedback_data)
         
-        # Save to CSV
         self.feedback_df.to_csv(output_path, index=False)
         print(f"✓ Feedback data saved to {output_path}")
         print(f"  Total entries: {len(self.feedback_df)}")
@@ -214,14 +185,12 @@ class RealEstateDataProcessor:
         return output_path
     
     def create_item_data(self, output_path='items.csv'):
-        """Create Gorse item data"""
         print("\nCreating item data...")
         
         if 'house_id' not in self.df.columns:
             print("Error: house_id column not found")
             return None
         
-        # Get unique properties
         unique_properties = self.df.dropna(subset=['house_id']).drop_duplicates('house_id')
         
         if len(unique_properties) == 0:
@@ -231,28 +200,24 @@ class RealEstateDataProcessor:
         item_data = []
         
         for _, row in unique_properties.iterrows():
-            # Determine listing type
             listing_type = []
             if pd.notna(row['rent_price']) and row['rent_price'] > 0:
                 listing_type.append('rental')
             if pd.notna(row['sale_price']) and row['sale_price'] > 0:
                 listing_type.append('sale')
             
-            # Create labels
             labels = []
             if pd.notna(row['estate_name']):
                 labels.append(f"estate:{row['estate_name']}")
             if pd.notna(row['region_name']):
                 labels.append(f"region:{row['region_name']}")
             
-            # Prepare numerical features
             numerical_features = {}
             if pd.notna(row['rent_price']) and row['rent_price'] > 0:
                 numerical_features['rent_price'] = float(row['rent_price'])
             if pd.notna(row['sale_price']) and row['sale_price'] > 0:
                 numerical_features['sale_price'] = float(row['sale_price'])
             
-            # Create item entry
             item_entry = {
                 'item_id': str(row['house_id']),
                 'timestamp': int(row.get('timestamp', 0)),
@@ -264,7 +229,6 @@ class RealEstateDataProcessor:
         
         self.items_df = pd.DataFrame(item_data)
         
-        # Save to CSV
         self.items_df.to_csv(output_path, index=False)
         print(f"✓ Item data saved to {output_path}")
         print(f"  Total unique properties: {len(self.items_df)}")
@@ -273,7 +237,6 @@ class RealEstateDataProcessor:
         return output_path
     
     def create_user_data(self, output_path='users.csv'):
-        """Create basic user data"""
         print("\nCreating user data...")
         
         unique_users = self.df['user_id'].dropna().unique()
@@ -289,7 +252,6 @@ class RealEstateDataProcessor:
         
         self.users_df = pd.DataFrame(user_data)
         
-        # Save to CSV
         self.users_df.to_csv(output_path, index=False)
         print(f"✓ User data saved to {output_path}")
         print(f"  Total unique users: {len(self.users_df)}")
@@ -297,7 +259,6 @@ class RealEstateDataProcessor:
         return output_path
     
     def debug_data(self):
-        """Debug function to examine data issues"""
         print("\n" + "="*60)
         print("DATA DEBUG INFO")
         print("="*60)
@@ -325,9 +286,7 @@ class RealEstateDataProcessor:
 
 
 def main():
-    """Main execution function"""
     
-    # Update this with your actual filename
     INPUT_CSV = 'realestate_data.csv'
     
     if not os.path.exists(INPUT_CSV):
@@ -335,30 +294,24 @@ def main():
         print("Please ensure the CSV file is in the current directory.")
         return
     
-    # Create output directory
     output_dir = 'gorse_data'
     Path(output_dir).mkdir(exist_ok=True)
     
-    # Initialize processor
     processor = RealEstateDataProcessor(INPUT_CSV)
     
-    # First, run debug to see what's in the data
     print("="*60)
     print("STEP 1: DEBUG DATA")
     print("="*60)
     
-    # Load data
     if not processor.load_data():
         print("Failed to load data. Running debug...")
         try:
-            # Try to load raw data for debugging
             df_raw = pd.read_csv(INPUT_CSV)
             print(f"\nRaw DataFrame loaded. Shape: {df_raw.shape}")
             print(f"Columns: {list(df_raw.columns)}")
             print(f"\nFirst row:")
             print(df_raw.iloc[0].to_dict())
             
-            # Show the problematic column
             print(f"\nSample of event_property column:")
             for i in range(min(3, len(df_raw))):
                 print(f"Row {i}: {df_raw.iloc[i]['event_property'][:200]}...")
@@ -366,14 +319,12 @@ def main():
             print(f"Could not load raw data: {e}")
         return
     
-    # Run debug
     processor.debug_data()
     
     print("\n" + "="*60)
     print("STEP 2: CREATE GORSE DATA FILES")
     print("="*60)
     
-    # Create Gorse-compatible files
     try:
         feedback_file = os.path.join(output_dir, 'feedback.csv')
         items_file = os.path.join(output_dir, 'items.csv')
@@ -392,7 +343,6 @@ def main():
             print(f"2. items.csv - {len(processor.items_df)} properties")
             print(f"3. users.csv - {len(processor.users_df)} users")
             
-            # Create a simple test file with 10 rows
             print(f"\nCreating test_sample.csv with 10 rows for quick testing...")
             if processor.feedback_df is not None and len(processor.feedback_df) > 10:
                 processor.feedback_df.head(10).to_csv(
